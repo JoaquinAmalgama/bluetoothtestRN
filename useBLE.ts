@@ -1,9 +1,7 @@
 /* eslint-disable no-bitwise */
 import { useMemo, useState } from "react";
 import { PermissionsAndroid, Platform } from "react-native";
-
 import * as ExpoDevice from "expo-device";
-
 import base64 from "react-native-base64";
 import {
   BleError,
@@ -12,15 +10,37 @@ import {
   Device,
 } from "react-native-ble-plx";
 
-const DATA_SERVICE_UUID = "19b10000-e8f2-537e-4f6c-d104768a1214";
-const COLOR_CHARACTERISTIC_UUID = "19b10001-e8f2-537e-4f6c-d104768a1217";
-
 const bleManager = new BleManager();
 
 function useBLE() {
   const [allDevices, setAllDevices] = useState<Device[]>([]);
   const [connectedDevice, setConnectedDevice] = useState<Device | null>(null);
   const [color, setColor] = useState("white");
+  const [heartRate, setHeartRate] = useState<number | null>(null); // Heart rate state now inside useBLE
+
+  const startHeartRateStreaming = async (device: Device) => {
+    try {
+      await device.monitorCharacteristicForService(
+        "0000180d-0000-1000-8000-00805f9b34fb", // Heart Rate Service UUID
+        "00002a37-0000-1000-8000-00805f9b34fb", // Heart Rate Measurement Characteristic UUID
+        (error, characteristic) => {
+          if (error) {
+            console.error("Heart Rate Monitor Error:", error);
+            return;
+          }
+
+          if (characteristic?.value) {
+            const rawValue = base64.decode(characteristic.value);
+            const heartRateValue = rawValue.charCodeAt(1); // Extract heart rate value
+            console.log("Heart Rate:", heartRateValue);
+            setHeartRate(heartRateValue); // Update the state
+          }
+        }
+      );
+    } catch (error) {
+      console.error("Failed to monitor heart rate:", error);
+    }
+  };
 
   const requestAndroid31Permissions = async () => {
     const bluetoothScanPermission = await PermissionsAndroid.request(
@@ -81,12 +101,13 @@ function useBLE() {
   const connectToDevice = async (device: Device) => {
     try {
       const deviceConnection = await bleManager.connectToDevice(device.id);
-      console.log("deviceConnection: " + deviceConnection)
+      console.log("deviceConnection: " + deviceConnection);
       setConnectedDevice(deviceConnection);
       await deviceConnection.discoverAllServicesAndCharacteristics();
       bleManager.stopDeviceScan();
 
-      startStreamingData(deviceConnection);
+      // Start streaming heart rate data
+      startHeartRateStreaming(deviceConnection);
     } catch (e) {
       console.log("FAILED TO CONNECT", e);
     }
@@ -100,8 +121,7 @@ function useBLE() {
       if (error) {
         console.log(error);
       }
-      console.log(device)
-      if ( device && device.name != "" ) {
+      if (device && device.name !== "") {
         setAllDevices((prevState: Device[]) => {
           if (!isDuplicteDevice(prevState, device)) {
             return [...prevState, device];
@@ -111,44 +131,6 @@ function useBLE() {
       }
     });
 
-  const onDataUpdate = (
-    error: BleError | null,
-    characteristic: Characteristic | null
-  ) => {
-    if (error) {
-      console.log(error);
-      return;
-    } else if (!characteristic?.value) {
-      console.log("No Data was received");
-      return;
-    }
-
-    const colorCode = base64.decode(characteristic.value);
-
-    let color = "white";
-    if (colorCode === "B") {
-      color = "blue";
-    } else if (colorCode === "R") {
-      color = "red";
-    } else if (colorCode === "G") {
-      color = "green";
-    }
-
-    setColor(color);
-  };
-
-  const startStreamingData = async (device: Device) => {
-    if (device) {
-      device.monitorCharacteristicForService(
-        DATA_SERVICE_UUID,
-        COLOR_CHARACTERISTIC_UUID,
-        onDataUpdate
-      );
-    } else {
-      console.log("No Device Connected");
-    }
-  };
-
   return {
     connectToDevice,
     allDevices,
@@ -156,7 +138,8 @@ function useBLE() {
     color,
     requestPermissions,
     scanForPeripherals,
-    startStreamingData,
+    startHeartRateStreaming, // Expose the function
+    heartRate, // Expose heart rate value
   };
 }
 

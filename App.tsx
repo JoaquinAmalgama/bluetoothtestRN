@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+
 import {
   SafeAreaView,
   StyleSheet,
@@ -17,12 +18,13 @@ const App = () => {
     color,
     requestPermissions,
     scanForPeripherals,
+    startHeartRateStreaming, // This needs to be present here
+    heartRate, // Real-time heart rate value
   } = useBLE();
   const [isModalVisible, setIsModalVisible] = useState<boolean>(false);
 
   const scanForDevices = async () => {
     const isPermissionsEnabled = await requestPermissions();
-    console.log(isPermissionsEnabled)
     if (isPermissionsEnabled) {
       scanForPeripherals();
     }
@@ -37,16 +39,26 @@ const App = () => {
     setIsModalVisible(true);
   };
 
+  // Start heart rate streaming when a device connects
+  useEffect(() => {
+    if (connectedDevice) {
+      startHeartRateStreaming(connectedDevice);
+    }
+  }, [connectedDevice]);
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: color }]}>
       <View style={styles.heartRateTitleWrapper}>
         {connectedDevice ? (
           <>
             <Text style={styles.heartRateTitleText}>Connected</Text>
+            <Text style={styles.heartRateText}>
+              Heart Rate: {heartRate !== null ? `${heartRate} BPM` : "Loading..."}
+            </Text>
           </>
         ) : (
           <Text style={styles.heartRateTitleText}>
-            Please connect the Arduino
+            Please connect the Heart Rate Monitor
           </Text>
         )}
       </View>
@@ -83,6 +95,7 @@ const styles = StyleSheet.create({
   heartRateText: {
     fontSize: 25,
     marginTop: 15,
+    color: "black",
   },
   ctaButton: {
     backgroundColor: "#FF6060",
