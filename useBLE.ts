@@ -13,6 +13,91 @@ import {
 const bleManager = new BleManager();
 
 function useBLE() {
+
+  const [isLoadingHistorical, setIsLoadingHistorical] = useState<boolean>(false);
+  const [historicalData, setHistoricalData] = useState<number[]>([]); // Stores historical heart rate data
+  
+  const retrieveHistoricalData = async (device: Device) => {
+    setIsLoadingHistorical(true);
+    setHistoricalData([]); // Clear old data
+  
+    try {
+      console.log("Requesting historical data...");
+  
+      // Discover all services and characteristics first
+      await device.discoverAllServicesAndCharacteristics();
+      const services = await device.services();
+  
+      for (const service of services) {
+        if (service.uuid === "0000fc00-0000-1000-8000-00805f9b34fb") {
+          const characteristics = await service.characteristics();
+          for (const characteristic of characteristics) {
+            console.log(
+              `Characteristic UUID: ${characteristic.uuid}, Writable: ${characteristic.isWritableWithResponse}`
+            );
+  
+            if (
+              characteristic.uuid === "0000fc21-0000-1000-8000-00805f9b34fb" &&
+              characteristic.isWritableWithResponse
+            ) {
+              // Send command to request historical data
+              const command = base64.encode("\x01"); // Example command
+              await characteristic.writeWithResponse(command);
+              console.log("Historical data command sent successfully.");
+            }
+          }
+        }
+      }
+  
+      // Listen for incoming packets on the notify characteristic
+      device.monitorCharacteristicForService(
+        "0000fc00-0000-1000-8000-00805f9b34fb",
+        "0000fc20-0000-1000-8000-00805f9b34fb",
+        (error, characteristic) => {
+          if (error) {
+            console.error("Error receiving historical data:", error);
+            return;
+          }
+  
+          if (characteristic?.value) {
+            const rawValue = characteristic.value;
+            const decodedValue = base64.decode(rawValue);
+  
+            // console.log("Received Packet raw:", decodedValue);
+  
+            // Process packet
+            const packetType = decodedValue.charCodeAt(0) & 0x0f; // Low 4 bits
+            const serialNumber = (decodedValue.charCodeAt(0) & 0xf0) >> 4; // High 4 bits
+            console.log(`Packet Type: ${packetType}, Serial Number: ${serialNumber}`);
+  
+            if (packetType >= 1 && packetType <= 4) {
+              // Extract heart rate values (starting at byte 6)
+              const heartRateValues: number[] = [];
+              for (let i = 6; i < decodedValue.length - 1; i++) {
+                heartRateValues.push(decodedValue.charCodeAt(i)); // Heart rate is 1 byte per value
+              }
+              console.log("Heart Rate Values:", heartRateValues);
+  
+              // Update state
+              setHistoricalData((prev) => [...prev, ...heartRateValues]);
+            } else if (packetType === 5) {
+              console.log("End of historical data transmission.");
+              setIsLoadingHistorical(false);
+            } else if (decodedValue.includes("done")) {
+              console.log("Data Transfer Completed.");
+              setIsLoadingHistorical(false);
+            }
+          }
+        }
+      );
+    } catch (error) {
+      console.error("Failed to retrieve historical data:", error);
+    } finally {
+      setIsLoadingHistorical(false);
+    }
+  };
+
+
   const [allDevices, setAllDevices] = useState<Device[]>([]);
   const [connectedDevice, setConnectedDevice] = useState<Device | null>(null);
   const [color, setColor] = useState("white");
@@ -32,7 +117,7 @@ function useBLE() {
           if (characteristic?.value) {
             const rawValue = base64.decode(characteristic.value);
             const heartRateValue = rawValue.charCodeAt(1); // Extract heart rate value
-            console.log("Heart Rate:", heartRateValue);
+            // console.log("Heart Rate:", heartRateValue);
             setHeartRate(heartRateValue); // Update the state
           }
         }
@@ -140,6 +225,9 @@ function useBLE() {
     scanForPeripherals,
     startHeartRateStreaming, // Expose the function
     heartRate, // Expose heart rate value
+    retrieveHistoricalData,
+    isLoadingHistorical,
+    historicalData
   };
 }
 

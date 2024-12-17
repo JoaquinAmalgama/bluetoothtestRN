@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from "react";
-
 import {
   SafeAreaView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  ActivityIndicator,
+  ScrollView,
 } from "react-native";
 import DeviceModal from "./DeviceConnectionModal";
 import useBLE from "./useBLE";
@@ -18,8 +19,11 @@ const App = () => {
     color,
     requestPermissions,
     scanForPeripherals,
-    startHeartRateStreaming, // This needs to be present here
-    heartRate, // Real-time heart rate value
+    startHeartRateStreaming,
+    heartRate,
+    retrieveHistoricalData, // Add this
+    isLoadingHistorical, // Loading state
+    historicalData, // Retrieved historical data
   } = useBLE();
   const [isModalVisible, setIsModalVisible] = useState<boolean>(false);
 
@@ -39,7 +43,6 @@ const App = () => {
     setIsModalVisible(true);
   };
 
-  // Start heart rate streaming when a device connects
   useEffect(() => {
     if (connectedDevice) {
       startHeartRateStreaming(connectedDevice);
@@ -55,6 +58,34 @@ const App = () => {
             <Text style={styles.heartRateText}>
               Heart Rate: {heartRate !== null ? `${heartRate} BPM` : "Loading..."}
             </Text>
+
+            {/* Button to retrieve historical data */}
+            <TouchableOpacity
+              onPress={() => retrieveHistoricalData(connectedDevice)}
+              style={styles.ctaButton}
+            >
+              <Text style={styles.ctaButtonText}>Retrieve Historical Data</Text>
+            </TouchableOpacity>
+
+            {/* Loading indicator */}
+            {isLoadingHistorical && (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#FF6060" />
+                <Text style={styles.loadingText}>Loading historical data...</Text>
+              </View>
+            )}
+
+            {/* Display historical data */}
+            {!isLoadingHistorical && historicalData.length > 0 && (
+              <ScrollView style={styles.dataContainer}>
+                <Text style={styles.dataTitle}>Historical Heart Rate Data:</Text>
+                {historicalData.map((value, index) => (
+                  <Text key={index} style={styles.dataText}>
+                    {`Measurement ${index + 1}: ${value} BPM`}
+                  </Text>
+                ))}
+              </ScrollView>
+            )}
           </>
         ) : (
           <Text style={styles.heartRateTitleText}>
@@ -110,6 +141,30 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
     color: "white",
+  },
+  loadingContainer: {
+    marginTop: 20,
+    alignItems: "center",
+  },
+  loadingText: {
+    fontSize: 18,
+    marginTop: 10,
+    color: "black",
+  },
+  dataContainer: {
+    marginTop: 20,
+    maxHeight: 200,
+    paddingHorizontal: 20,
+  },
+  dataTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  dataText: {
+    fontSize: 16,
+    color: "black",
   },
 });
 
