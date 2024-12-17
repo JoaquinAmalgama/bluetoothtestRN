@@ -7,6 +7,7 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
+  ScrollView,
 } from "react-native";
 import { Device } from "react-native-ble-plx";
 
@@ -27,6 +28,7 @@ const DeviceModalListItem: FC<DeviceModalListItemProps> = (props) => {
   const { item, connectToPeripheral, closeModal } = props;
 
   const connectAndCloseModal = useCallback(() => {
+    console.log(item)
     connectToPeripheral(item.item);
     closeModal();
   }, [closeModal, connectToPeripheral, item.item]);
@@ -45,7 +47,6 @@ const DeviceModalListItem: FC<DeviceModalListItemProps> = (props) => {
 
 const DeviceModal: FC<DeviceModalProps> = (props) => {
   const { devices, visible, connectToPeripheral, closeModal } = props;
-
   const renderDeviceModalListItem = useCallback(
     (item: ListRenderItemInfo<Device>) => {
       return (
@@ -70,11 +71,13 @@ const DeviceModal: FC<DeviceModalProps> = (props) => {
         <Text style={modalStyle.modalTitleText}>
           Tap on a device to connect
         </Text>
+        <ScrollView>
         <FlatList
           contentContainerStyle={modalStyle.modalFlatlistContiner}
           data={devices}
           renderItem={renderDeviceModalListItem}
         />
+        </ScrollView>
       </SafeAreaView>
     </Modal>
   );

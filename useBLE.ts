@@ -81,6 +81,7 @@ function useBLE() {
   const connectToDevice = async (device: Device) => {
     try {
       const deviceConnection = await bleManager.connectToDevice(device.id);
+      console.log("deviceConnection: " + deviceConnection)
       setConnectedDevice(deviceConnection);
       await deviceConnection.discoverAllServicesAndCharacteristics();
       bleManager.stopDeviceScan();
@@ -99,11 +100,8 @@ function useBLE() {
       if (error) {
         console.log(error);
       }
-
-      if (
-        device &&
-        (device.localName === "Arduino" || device.name === "Arduino")
-      ) {
+      console.log(device)
+      if ( device && device.name != "" ) {
         setAllDevices((prevState: Device[]) => {
           if (!isDuplicteDevice(prevState, device)) {
             return [...prevState, device];

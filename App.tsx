@@ -22,6 +22,7 @@ const App = () => {
 
   const scanForDevices = async () => {
     const isPermissionsEnabled = await requestPermissions();
+    console.log(isPermissionsEnabled)
     if (isPermissionsEnabled) {
       scanForPeripherals();
     }
