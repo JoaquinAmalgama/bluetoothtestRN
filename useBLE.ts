@@ -14,6 +14,106 @@ const bleManager = new BleManager();
 
 function useBLE() {
 
+  const sendUserInformation = async (device: Device) => {
+    try {
+      // Example user information: Customize these values
+      const weight = 70 * 10; // in 0.1kg units, e.g., 70kg -> 700
+      const age = 30; // Age in years
+      const height = 175; // Height in cm
+      const stepLength = 75; // Step length in cm
+      const gender = 1; // 0: Female, 1: Male
+  
+      // Packet format: [0xE1, packetSerialNo, weight, age, height, stepLength, gender, checksum]
+      const packet = [
+        0xE1, // Command Word
+        0x00, // Packet serial number (set to 0 for now)
+        (weight >> 8) & 0xff, // Weight high byte
+        weight & 0xff, // Weight low byte
+        age, // Age
+        height, // Height
+        stepLength, // Step length
+        gender, // Gender
+      ];
+  
+      // Add Checksum: Sum of all bytes modulo 256
+      const checksum = packet.reduce((sum, byte) => sum + byte, 0) & 0xff;
+      packet.push(checksum);
+  
+      // Convert packet to base64
+      const command = base64.encode(String.fromCharCode(...packet));
+  
+      // Write packet to the device
+      console.log("Sending User Information:", packet);
+      await device.writeCharacteristicWithoutResponseForService(
+        "0000fc00-0000-1000-8000-00805f9b34fb", // Service UUID
+        "0000fc21-0000-1000-8000-00805f9b34fb", // Write Characteristic UUID
+        command
+      );
+      console.log("User information sent successfully!");
+    } catch (error) {
+      console.error("Failed to send user information:", error);
+    }
+  };
+
+  const sendUTCTime = async (device: Device) => {
+    try {
+      const currentUTC = Math.floor(new Date().getTime() / 1000); // Current UTC time in seconds
+  
+      // Packet format: [0xE2, packetSerialNo, UTC (4 bytes), checksum]
+      const packet = [
+        0xE2, // Command Word
+        0x00, // Packet serial number (set to 0 for now)
+        (currentUTC >> 24) & 0xff, // UTC high byte
+        (currentUTC >> 16) & 0xff,
+        (currentUTC >> 8) & 0xff,
+        currentUTC & 0xff, // UTC low byte
+      ];
+  
+      // Add Checksum: Sum of all bytes modulo 256
+      const checksum = packet.reduce((sum, byte) => sum + byte, 0) & 0xff;
+      packet.push(checksum);
+  
+      // Convert packet to base64
+      const command = base64.encode(String.fromCharCode(...packet));
+  
+      // Write packet to the device
+      console.log("Sending UTC Time:", packet);
+      await device.writeCharacteristicWithoutResponseForService(
+        "0000fc00-0000-1000-8000-00805f9b34fb", // Service UUID
+        "0000fc21-0000-1000-8000-00805f9b34fb", // Write Characteristic UUID
+        command
+      );
+      console.log("UTC time sent successfully!");
+    } catch (error) {
+      console.error("Failed to send UTC time:", error);
+    }
+  };
+  
+  
+
+  const sendAcknowledgment = async (
+    device: Device,
+    characteristicUUID: string,
+    packetNumber: number
+  ) => {
+    try {
+      // Command structure: "E0" + Packet Serial Number
+      const acknowledgmentCommand = String.fromCharCode(0xe0, packetNumber);
+      const encodedCommand = base64.encode(acknowledgmentCommand);
+  
+      console.log(`Sending ACK for Packet Serial: ${packetNumber}`);
+      await device.writeCharacteristicWithResponseForService(
+        "0000fc00-0000-1000-8000-00805f9b34fb", // Service UUID
+        characteristicUUID,                   // Characteristic UUID
+        encodedCommand
+      );
+    } catch (error) {
+      console.error("Failed to send acknowledgment:", error);
+    }
+  };
+
+
+
   const [isLoadingHistorical, setIsLoadingHistorical] = useState<boolean>(false);
   const [historicalData, setHistoricalData] = useState<number[]>([]); // Stores historical heart rate data
   
@@ -38,11 +138,11 @@ function useBLE() {
   
             if (
               characteristic.uuid === "0000fc21-0000-1000-8000-00805f9b34fb" &&
-              characteristic.isWritableWithResponse
+              characteristic.isWritableWithoutResponse
             ) {
               // Send command to request historical data
               const command = base64.encode("\x01"); // Example command
-              await characteristic.writeWithResponse(command);
+              await characteristic.writeWithoutResponse(command);
               console.log("Historical data command sent successfully.");
             }
           }
@@ -53,33 +153,43 @@ function useBLE() {
       device.monitorCharacteristicForService(
         "0000fc00-0000-1000-8000-00805f9b34fb",
         "0000fc20-0000-1000-8000-00805f9b34fb",
-        (error, characteristic) => {
+        async (error, characteristic) => {
           if (error) {
             console.error("Error receiving historical data:", error);
             return;
           }
-  
+      
           if (characteristic?.value) {
             const rawValue = characteristic.value;
             const decodedValue = base64.decode(rawValue);
-  
-            // console.log("Received Packet raw:", decodedValue);
-  
-            // Process packet
+      
             const packetType = decodedValue.charCodeAt(0) & 0x0f; // Low 4 bits
             const serialNumber = (decodedValue.charCodeAt(0) & 0xf0) >> 4; // High 4 bits
-            console.log(`Packet Type: ${packetType}, Serial Number: ${serialNumber}`);
-  
+            console.log(
+              `Packet Type: ${packetType}, Serial Number: ${serialNumber}`
+            );
+      
+            // Log full decoded packet
+            // console.log(
+            //   "Full Decoded Packet:",
+            //   decodedValue
+            //     .split("")
+            //     .map((c) => c.charCodeAt(0).toString(16).padStart(2, "0"))
+            //     .join(" ")
+            // );
+      
             if (packetType >= 1 && packetType <= 4) {
-              // Extract heart rate values (starting at byte 6)
+              // Extract heart rate values
               const heartRateValues: number[] = [];
               for (let i = 6; i < decodedValue.length - 1; i++) {
-                heartRateValues.push(decodedValue.charCodeAt(i)); // Heart rate is 1 byte per value
+                heartRateValues.push(decodedValue.charCodeAt(i));
               }
-              console.log("Heart Rate Values:", heartRateValues);
-  
-              // Update state
+              // console.log("Heart Rate Values:", heartRateValues);
+      
               setHistoricalData((prev) => [...prev, ...heartRateValues]);
+      
+              // Acknowledge the packet
+              await sendAcknowledgment(device, "0000fc21-0000-1000-8000-00805f9b34fb", serialNumber);
             } else if (packetType === 5) {
               console.log("End of historical data transmission.");
               setIsLoadingHistorical(false);
@@ -90,6 +200,7 @@ function useBLE() {
           }
         }
       );
+      
     } catch (error) {
       console.error("Failed to retrieve historical data:", error);
     } finally {
@@ -186,17 +297,46 @@ function useBLE() {
   const connectToDevice = async (device: Device) => {
     try {
       const deviceConnection = await bleManager.connectToDevice(device.id);
-      console.log("deviceConnection: " + deviceConnection);
+      console.log("Connected to device:", deviceConnection);
       setConnectedDevice(deviceConnection);
+  
       await deviceConnection.discoverAllServicesAndCharacteristics();
-      bleManager.stopDeviceScan();
 
-      // Start streaming heart rate data
-      startHeartRateStreaming(deviceConnection);
-    } catch (e) {
-      console.log("FAILED TO CONNECT", e);
+
+          // Retrieve all services
+    const services = await deviceConnection.services();
+    console.log("Discovered Services:");
+
+    for (const service of services) {
+      console.log(`Service UUID: ${service.uuid}`);
+
+      // Retrieve characteristics for each service
+      // const characteristics = await service.characteristics();
+      // for (const characteristic of characteristics) {
+      //   console.log(`  Characteristic UUID: ${characteristic.uuid}`);
+      //   console.log(`    - Is Readable: ${characteristic.isReadable}`);
+      //   console.log(`    - Is Writable (With Response): ${characteristic.isWritableWithResponse}`);
+      //   console.log(`    - Is Writable (Without Response): ${characteristic.isWritableWithoutResponse}`);
+      //   console.log(`    - Is Notifiable: ${characteristic.isNotifiable}`);
+      //   console.log(`    - Is Indicatable: ${characteristic.isIndicatable}`);
+      // }
+    }
+
+  
+      // Stop scanning for other devices
+      bleManager.stopDeviceScan();
+  
+      // Send UTC and User Information
+      await sendUTCTime(deviceConnection);
+      await sendUserInformation(deviceConnection);
+  
+      // Proceed to retrieve historical data
+      // retrieveHistoricalData(deviceConnection);
+    } catch (error) {
+      console.error("Connection failed:", error);
     }
   };
+  
 
   const isDuplicteDevice = (devices: Device[], nextDevice: Device) =>
     devices.findIndex((device) => nextDevice.id === device.id) > -1;
