@@ -19,8 +19,10 @@ const App = () => {
     color,
     requestPermissions,
     scanForPeripherals,
+    startBatteryStreaming,
     startHeartRateStreaming,
     heartRate,
+    battery,
     retrieveHistoricalData, // Add this
     isLoadingHistorical, // Loading state
     historicalData, // Retrieved historical data
@@ -45,7 +47,9 @@ const App = () => {
 
   useEffect(() => {
     if (connectedDevice) {
-      startHeartRateStreaming(connectedDevice);
+      // startHeartRateStreaming(connectedDevice);
+      // startBatteryStreaming(connectedDevice)
+      
     }
   }, [connectedDevice]);
 
@@ -57,6 +61,9 @@ const App = () => {
             <Text style={styles.heartRateTitleText}>Connected</Text>
             <Text style={styles.heartRateText}>
               Heart Rate: {heartRate !== null ? `${heartRate} BPM` : "Loading..."}
+            </Text>
+            <Text style={styles.heartRateText}>
+              Battery: {heartRate !== null ? `${battery}%` : "Loading..."}
             </Text>
 
             {/* Button to retrieve historical data */}
