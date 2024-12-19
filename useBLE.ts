@@ -11,6 +11,15 @@ import {
 
 const bleManager = new BleManager();
 
+function getDecodedValue(decodedValue: string) {
+  const utc = (decodedValue.charCodeAt(2) << 24) |
+  (decodedValue.charCodeAt(3) << 16) |
+  (decodedValue.charCodeAt(4) << 8) |
+  decodedValue.charCodeAt(5);
+  
+  console.log("UTC Timestamp:", utc); // Should be a valid positive number
+}
+
 function useBLE() {
   const [userInformationSynced, setUserInformationSynced] = useState(false);
   const [utcTimeSynced, setUtcTimeSynced] = useState(false);
@@ -140,28 +149,6 @@ function useBLE() {
   
       // Discover all services and characteristics first
       await device.discoverAllServicesAndCharacteristics();
-      const services = await device.services();
-  
-      for (const service of services) {
-        if (service.uuid === "0000fc00-0000-1000-8000-00805f9b34fb") {
-          const characteristics = await service.characteristics();
-          for (const characteristic of characteristics) {
-            console.log(
-              `Characteristic UUID: ${characteristic.uuid}, Writable: ${characteristic.isWritableWithResponse}`
-            );
-  
-            if (
-              characteristic.uuid === "0000fc21-0000-1000-8000-00805f9b34fb" &&
-              characteristic.isWritableWithoutResponse
-            ) {
-              // Send command to request historical data
-              const command = base64.encode("\x01"); // Example command
-              await characteristic.writeWithoutResponse(command);
-              console.log("Historical data command sent successfully.");
-            }
-          }
-        }
-      }
   
       // Listen for incoming packets on the notify characteristic
       device.monitorCharacteristicForService(
@@ -172,42 +159,54 @@ function useBLE() {
             console.error("Error receiving notification:", error);
             return;
           }
-      
+  
           if (characteristic?.value) {
             const decodedValue = base64.decode(characteristic.value);
             const packetType = decodedValue.charCodeAt(0) & 0x0f; // Low 4 bits
-      
-            console.log(`Received Packet Type: ${packetType}`);
-      
-            if (packetType === 1 && !userInformationSynced) {
-              console.log("Received user information request. Sending user information...");
-              await sendUserInformation(device);
-              setUserInformationSynced(true); // Mark as sent
-            } else if (packetType === 2 && !utcTimeSynced) {
-              console.log("Received UTC request. Sending UTC time...");
-              await sendUTCTime(device);
-              setUtcTimeSynced(true); // Mark as sent
-            } else if (packetType === 0xE0) {
-              console.log("Received acknowledgment from device. Ready to proceed.");
+            const serialNumber = (decodedValue.charCodeAt(0) & 0xf0) >> 4; // High 4 bits (packet serial number)
+  
+            // Log packet details
+            console.log(`Received Packet Type: ${packetType}, Serial Number: ${serialNumber}`);
+  
+            // Decode and process packet data if needed...
+  
+            // Construct and send acknowledgment
+            const ackPacket = [
+              0xe0, // Command word
+              serialNumber, // Packet serial number
+              0x00, // Acknowledge packet as correct
+            ];
+            const checksum = ackPacket.reduce((sum, byte) => sum + byte, 0) & 0xff; // Compute checksum
+            ackPacket.push(checksum);
+  
+            const encodedAck = base64.encode(String.fromCharCode(...ackPacket));
+  
+            try {
+              await device.writeCharacteristicWithoutResponseForService(
+                "0000fc00-0000-1000-8000-00805f9b34fb", // Service UUID
+                "0000fc21-0000-1000-8000-00805f9b34fb", // Write Characteristic UUID
+                encodedAck
+              );
+              console.log("Acknowledgment sent successfully for Serial Number:", serialNumber);
+            } catch (writeError) {
+              console.error("Failed to send acknowledgment:", writeError);
             }
           }
         }
       );
-
+  
       device.onDisconnected(() => {
         console.warn("Device disconnected. Resetting states.");
         setUserInformationSynced(false);
         setUtcTimeSynced(false);
       });
-      
-      
-      
     } catch (error) {
       console.error("Failed to retrieve historical data:", error);
     } finally {
       setIsLoadingHistorical(false);
     }
   };
+  
 
 
 
@@ -225,7 +224,6 @@ function useBLE() {
           if (characteristic?.value) {
             const rawValue = base64.decode(characteristic.value);
             const heartRateValue = rawValue.charCodeAt(1); // Extract heart rate value
-            // console.log("Heart Rate:", heartRateValue);
             setHeartRate(heartRateValue); // Update the state
           }
         }
