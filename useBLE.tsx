@@ -19,7 +19,7 @@ interface ProcessedPackets {
 
 function useBLE() {
 
-  const processedPackets: ProcessedPackets = {};
+  const processedPackets: Packet[] = [];
 
   const [userInformationSynced, setUserInformationSynced] = useState(false);
   const [utcTimeSynced, setUtcTimeSynced] = useState(false);
@@ -187,7 +187,7 @@ function useBLE() {
           if (characteristic?.value) {
             const packet = new Packet(characteristic.value)
 
-            console.log(`Received Packet Type: ${packet.packetType}, Serial Number: ${packet.serialNumber}`);
+            console.log(`Received Packet Type: ${packet.packetType}, Serial Number: ${packet.serialNumber}, PacketSerial:  ${packet.packetSerial}`);
 
             if (packet.packetType == 1) {
               console.log("requesting user Information")
@@ -197,30 +197,33 @@ function useBLE() {
               console.log("Requesting UTC")
               // sendUTCTime(device)
               sendUnchangedUserInformation(device, packet)
+            } else if (packet.packetType == 6) {
+              console.log("Packet 6 found. Dying")
             } else if (packet.packetType == 8) {
-              if (processedPackets[packet.serialNumber] != null) { return }
-              processedPackets[packet.serialNumber] = packet
+              processedPackets.push(packet)
 
-              // Construct and send acknowledgment
-              const ackPacket = [
-                0xe0, // Command word
-                packet.serialNumber, // Packet serial number
-                0x00, // Acknowledge packet as correct
-              ];
-              const checksum = ackPacket.reduce((sum, byte) => sum + byte, 0) & 0xff; // Compute checksum
-              ackPacket.push(checksum);
+              if (packet.packetSerial == 5) {
+                // Construct and send acknowledgment
+                const ackPacket = [
+                  0xe0, // Command word
+                  packet.serialNumber, // Packet serial number
+                  0x00, // Acknowledge packet as correct
+                ];
+                const checksum = ackPacket.reduce((sum, byte) => sum + byte, 0) & 0xff; // Compute checksum
+                ackPacket.push(checksum);
 
-              const encodedAck = base64.encode(String.fromCharCode(...ackPacket));
+                const encodedAck = base64.encode(String.fromCharCode(...ackPacket));
 
-              try {
-                await device.writeCharacteristicWithoutResponseForService(
-                  "0000fc00-0000-1000-8000-00805f9b34fb", // Service UUID
-                  "0000fc21-0000-1000-8000-00805f9b34fb", // Write Characteristic UUID
-                  encodedAck
-                );
-                console.log("Acknowledgment sent successfully for Serial Number:", packet.serialNumber);
-              } catch (writeError) {
-                console.error("Failed to send acknowledgment:", writeError);
+                try {
+                  await device.writeCharacteristicWithoutResponseForService(
+                    "0000fc00-0000-1000-8000-00805f9b34fb", // Service UUID
+                    "0000fc21-0000-1000-8000-00805f9b34fb", // Write Characteristic UUID
+                    encodedAck
+                  );
+                  console.log("Acknowledgment sent successfully for Serial Number:", packet.serialNumber);
+                } catch (writeError) {
+                  console.error("Failed to send acknowledgment:", writeError);
+                }
               }
             } else if (packet.packetType == 6) {
               console.log("Type 6 dont know what to do")
