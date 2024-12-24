@@ -198,7 +198,6 @@ function useBLE() {
               // sendUTCTime(device)
               sendUnchangedUserInformation(device, packet)
             } else if (packet.packetType == 6) {
-              console.log("Packet 6 found. Dying")
             } else if (packet.packetType == 8) {
               processedPackets.push(packet)
 
